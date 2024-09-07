@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
           primary: primaryColor,
         ),
       ),
-      home: LoginScreen(), 
+      home: LoginScreen(),
     );
   }
 }
@@ -141,10 +141,12 @@ class _SpeakerControlState extends State<SpeakerControl> {
         List<Map<String, String>> fetchedMusicList = [];
         for (var dir in data) {
           for (var music in dir['musicInfoArray']) {
-            fetchedMusicList.add({
-              'cpFileName': music['cpFileName'],
-              'serverMusicID': music['serverMusicID'],
-            });
+            if (music['cpFileName'] != 'LINE') {
+              fetchedMusicList.add({
+                'cpFileName': music['cpFileName'],
+                'serverMusicID': music['serverMusicID'],
+              });
+            }
           }
         }
         setState(() {
@@ -258,9 +260,9 @@ class _SpeakerControlState extends State<SpeakerControl> {
     }
   }
 
-@override
+  @override
   void dispose() {
-    _ipController.dispose(); 
+    _ipController.dispose();
     super.dispose();
   }
 
@@ -270,7 +272,8 @@ class _SpeakerControlState extends State<SpeakerControl> {
       appBar: AppBar(
         title: Text('Speaker Control'),
         leading: Padding(
-          padding: EdgeInsets.only(top: 0.0, bottom: 0.0, left: 8.0, right: 0.0),
+          padding:
+              EdgeInsets.only(top: 0.0, bottom: 0.0, left: 8.0, right: 0.0),
           child: Image.asset('assets/Nassera.png'),
         ),
       ),
