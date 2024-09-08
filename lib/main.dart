@@ -53,7 +53,6 @@ class _LoginScreenState extends State<LoginScreen> {
         email: 'mina.nassef09@gmail.com',
         password: _passwordController.text.trim(),
       );
-      // if logged in >> navigate to the control
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (context) => SpeakerControl()),
       );
@@ -117,7 +116,8 @@ class _SpeakerControlState extends State<SpeakerControl> {
   String ipAddress = '41.155.214.76';
   TextEditingController _ipController = TextEditingController();
   double _currentVolume = 50;
-  List<Map<String, String>> musicList = [];
+  List<Map<String, dynamic>> musicList =
+      []; // Changed to dynamic to store duration
   String? selectedMusicID;
   List<int> allSpeakerIDs = [];
   List<int> availableSpeakerIDs = [];
@@ -138,13 +138,14 @@ class _SpeakerControlState extends State<SpeakerControl> {
       );
       if (response.statusCode == 200) {
         List data = json.decode(response.body);
-        List<Map<String, String>> fetchedMusicList = [];
+        List<Map<String, dynamic>> fetchedMusicList = [];
         for (var dir in data) {
           for (var music in dir['musicInfoArray']) {
             if (music['cpFileName'] != 'LINE') {
               fetchedMusicList.add({
                 'cpFileName': music['cpFileName'],
                 'serverMusicID': music['serverMusicID'],
+                'duration': music['wFileTime'], // Storing duration
               });
             }
           }
@@ -260,6 +261,37 @@ class _SpeakerControlState extends State<SpeakerControl> {
     }
   }
 
+  Future<void> playAllMusicInSequence() async {
+    if (selectedMusicID == null) return; // Ensure a music is selected
+
+    // Find the index of the selected music in the music list
+    int startIndex = musicList.indexWhere(
+      (music) => music['serverMusicID'] == selectedMusicID,
+    );
+
+    if (startIndex == -1) return; // If the music is not found, return early
+
+    // Play all music from the selected one onward
+    for (int i = startIndex; i < musicList.length; i++) {
+      String musicID = musicList[i]['serverMusicID'];
+      int duration = musicList[i]['duration']; // Duration in seconds
+
+      // Update selectedMusicID to the current music ID
+      setState(() {
+        selectedMusicID = musicID; // This will trigger the UI to update
+      });
+
+      // Play the music
+      await playMusic(json.encode(selectedSpeakerIDs), musicID);
+
+      // Wait for the duration of the track before moving to the next one
+      await Future.delayed(Duration(seconds: duration));
+
+      // Stop the current music before moving to the next one
+      await stopMusic(json.encode(selectedSpeakerIDs));
+    }
+  }
+
   @override
   void dispose() {
     _ipController.dispose();
@@ -277,13 +309,79 @@ class _SpeakerControlState extends State<SpeakerControl> {
           child: Image.asset('assets/Nassera.png'),
         ),
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Card(
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            Card(
+              elevation: 4.0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8.0),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: _ipController,
+                      decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        labelText: 'IP Address',
+                        prefixIcon: Icon(Icons.network_wifi),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          ipAddress = value;
+                          fetchMusicList();
+                        });
+                      },
+                    ),
+                    SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        ElevatedButton(
+                          onPressed:
+                              musicList.isEmpty || selectedSpeakerIDs.isEmpty
+                                  ? null
+                                  : () {
+                                      playAllMusicInSequence();
+                                    },
+                          child: Text('Play Music'),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 10),
+                    ElevatedButton(
+                      onPressed: selectedSpeakerIDs.isEmpty
+                          ? null
+                          : () {
+                              stopMusic(json.encode(selectedSpeakerIDs));
+                            },
+                      child: Text('Stop Music'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SizedBox(height: 20),
+            Text('Volume: ${_currentVolume.toInt()}'),
+            Slider(
+              value: _currentVolume,
+              min: 0,
+              max: 100,
+              divisions: 100,
+              label: _currentVolume.toInt().toString(),
+              onChanged: (double value) {
+                setState(() {
+                  _currentVolume = value;
+                });
+                setVolume(json.encode(selectedSpeakerIDs), _currentVolume);
+              },
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: Card(
                 elevation: 4.0,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8.0),
@@ -291,157 +389,92 @@ class _SpeakerControlState extends State<SpeakerControl> {
                 child: Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      TextField(
-                        controller: _ipController,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(),
-                          labelText: 'IP Address',
-                          prefixIcon: Icon(Icons.network_wifi),
+                      Text(
+                        'Available Music',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
-                        onChanged: (value) {
-                          setState(() {
-                            ipAddress = value;
-                            fetchMusicList();
-                          });
-                        },
-                      ),
-                      SizedBox(height: 20),
-                      ElevatedButton(
-                        onPressed: selectedMusicID == null
-                            ? null
-                            : () {
-                                playMusic(json.encode(selectedSpeakerIDs),
-                                    selectedMusicID!);
-                              },
-                        child: Text('Play Music'),
                       ),
                       SizedBox(height: 10),
-                      ElevatedButton(
-                        onPressed: selectedSpeakerIDs.isEmpty
-                            ? null
-                            : () {
-                                stopMusic(json.encode(selectedSpeakerIDs));
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: musicList.length,
+                          itemBuilder: (context, index) {
+                            return ListTile(
+                              title: Text(musicList[index]['cpFileName']!),
+                              onTap: () {
+                                setState(() {
+                                  selectedMusicID =
+                                      musicList[index]['serverMusicID'];
+                                });
                               },
-                        child: Text('Stop Music'),
+                              selected: selectedMusicID ==
+                                  musicList[index]['serverMusicID'],
+                            );
+                          },
+                        ),
                       ),
                     ],
                   ),
                 ),
               ),
-              SizedBox(height: 20),
-              Text('Volume: ${_currentVolume.toInt()}'),
-              Slider(
-                value: _currentVolume,
-                min: 0,
-                max: 100,
-                divisions: 100,
-                label: _currentVolume.toInt().toString(),
-                onChanged: (double value) {
-                  setState(() {
-                    _currentVolume = value;
-                  });
-                  setVolume(json.encode(selectedSpeakerIDs), _currentVolume);
-                },
-              ),
-              SizedBox(height: 20),
-              Expanded(
-                child: Card(
-                  elevation: 4.0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Available Music',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: Card(
+                elevation: 4.0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8.0),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Available Speakers',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
                         ),
-                        SizedBox(height: 10),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: musicList.length,
-                            itemBuilder: (context, index) {
-                              return ListTile(
-                                title: Text(musicList[index]['cpFileName']!),
-                                onTap: () {
-                                  setState(() {
-                                    selectedMusicID =
-                                        musicList[index]['serverMusicID'];
-                                  });
-                                },
-                                selected: selectedMusicID ==
-                                    musicList[index]['serverMusicID'],
-                              );
-                            },
-                          ),
+                      ),
+                      SizedBox(height: 10),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: allSpeakerIDs.length,
+                          itemBuilder: (context, index) {
+                            final speakerID = allSpeakerIDs[index];
+                            final isAvailable =
+                                availableSpeakerIDs.contains(speakerID);
+                            return CheckboxListTile(
+                              title: Text('Speaker $speakerID'),
+                              value: selectedSpeakerIDs.contains(speakerID),
+                              onChanged: isAvailable
+                                  ? (bool? value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          selectedSpeakerIDs.add(speakerID);
+                                        } else {
+                                          selectedSpeakerIDs.remove(speakerID);
+                                        }
+                                      });
+                                    }
+                                  : null,
+                              activeColor: Theme.of(context).primaryColor,
+                              enabled: isAvailable,
+                            );
+                          },
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              SizedBox(height: 20),
-              Expanded(
-                child: Card(
-                  elevation: 4.0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Available Speakers',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 10),
-                        Expanded(
-                          child: ListView.builder(
-                            itemCount: allSpeakerIDs.length,
-                            itemBuilder: (context, index) {
-                              final speakerID = allSpeakerIDs[index];
-                              final isAvailable =
-                                  availableSpeakerIDs.contains(speakerID);
-                              return CheckboxListTile(
-                                title: Text('Speaker $speakerID'),
-                                value: selectedSpeakerIDs.contains(speakerID),
-                                onChanged: isAvailable
-                                    ? (bool? value) {
-                                        setState(() {
-                                          if (value == true) {
-                                            selectedSpeakerIDs.add(speakerID);
-                                          } else {
-                                            selectedSpeakerIDs
-                                                .remove(speakerID);
-                                          }
-                                        });
-                                      }
-                                    : null,
-                                activeColor: Theme.of(context).primaryColor,
-                                enabled: isAvailable,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
