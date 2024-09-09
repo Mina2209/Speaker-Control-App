@@ -164,11 +164,16 @@ class _SpeakerControlState extends State<SpeakerControl> {
   Future<void> fetchAllSpeakers() async {
     try {
       final response = await http.get(
-        Uri.parse('http://$ipAddress:25012/api/getAllDevicesID'),
+        Uri.parse('http://$ipAddress:25012/api/getAllDevicesInfo'),
       );
       if (response.statusCode == 200) {
-        List<int> fetchedSpeakerIDs =
-            List<int>.from(json.decode(response.body));
+        List data = json.decode(response.body);
+        List<int> fetchedSpeakerIDs = [];
+        for (var device in data) {
+          if (device['byDevTypeName'] == 'Network play terminal') {
+            fetchedSpeakerIDs.add(device['unDevID']);
+          }
+        }
         setState(() {
           allSpeakerIDs = fetchedSpeakerIDs;
         });
@@ -190,7 +195,7 @@ class _SpeakerControlState extends State<SpeakerControl> {
         List data = json.decode(response.body);
         List<int> fetchedAvailableSpeakerIDs = [];
         for (var device in data) {
-          if (device['byDevTypeName'] == 'Network play terminal') {
+          if (device['byCurStateStr'] != 'Offline') {
             fetchedAvailableSpeakerIDs.add(device['unDevID']);
           }
         }
